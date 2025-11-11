@@ -1,0 +1,89 @@
+# CI/CD Pipeline - Requerimientos IE2 completos
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  JAVA_VERSION: '21'
+  JAVA_DISTRIBUTION: 'temurin'
+
+jobs:
+  # IE2 Requerimiento: CI/CD Pipeline completo
+  build-and-test:
+    name: Build y Tests con JaCoCo
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      - name: Configurar JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          cache: 'maven'
+      
+      # IE2: Build automatizado
+      - name: Compilar proyecto
+        run: ./mvnw clean compile
+      
+      # IE2: Ejecución automatizada de tests
+      - name: Ejecutar tests unitarios
+        run: ./mvnw test
+      
+      # IE2: Generar reporte de cobertura JaCoCo
+      - name: Generar reporte JaCoCo
+        run: ./mvnw jacoco:report
+      
+      # IE2: Validar que el reporte se generó correctamente
+      - name: Verificar reporte de cobertura
+        run: |
+          if [ -f target/site/jacoco/index.html ]; then
+            echo "✅ IE2 COMPLETO: Reporte JaCoCo generado exitosamente"
+            echo "📊 Archivos generados:"
+            ls -la target/site/jacoco/
+            echo "📈 Estadísticas de cobertura disponibles en artifacts"
+          else
+            echo "❌ ERROR IE2: Reporte JaCoCo no se generó"
+            exit 1
+          fi
+      
+      # IE2: Subir artifacts - Reporte JaCoCo
+      - name: Subir reporte de cobertura JaCoCo
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jacoco-coverage-report
+          path: target/site/jacoco/
+          retention-days: 30
+      
+      # IE2: Subir artifacts - Resultados de tests
+      - name: Subir resultados de tests
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: target/surefire-reports/
+          retention-days: 30
+      
+      # IE2: Resumen del pipeline
+      - name: Resumen IE2 - CI/CD Pipeline
+        run: |
+          echo "🎯 IE2 REQUERIMIENTOS COMPLETADOS:"
+          echo "✅ Build automatizado con Maven"
+          echo "✅ Ejecución automatizada de tests"
+          echo "✅ Generación de reporte JaCoCo"
+          echo "✅ Artifacts subidos a GitHub Actions"
+          echo "✅ Pipeline activado por push/PR"
+          echo ""
+          echo "📊 Reportes disponibles en Artifacts:"
+          echo "- jacoco-coverage-report: Cobertura de código"
+          echo "- test-results: Resultados de tests unitarios"
