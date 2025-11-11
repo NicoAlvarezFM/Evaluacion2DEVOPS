@@ -8,7 +8,8 @@ class BdgetApplicationTests {
 
         @Test
         void contextLoads() {
-                BdgetApplication.main(new String[]{});
+                // El contexto de Spring se carga automáticamente
+                // Este test pasa si no hay errores de configuración
         }
 
 }
