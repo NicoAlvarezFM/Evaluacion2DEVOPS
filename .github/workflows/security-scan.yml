@@ -47,14 +47,8 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: snyk.sarif
-      
-      - name: Snyk Monitor
-        uses: snyk/actions/maven@master
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          command: monitor
+  #
+  # (Snyk temporalmente deshabilitado - requiere configurar SNYK_TOKEN en GitHub Secrets)
 
   # OWASP Dependency Check
   owasp-scan:
@@ -76,7 +70,7 @@ jobs:
         run: |
           ./mvnw org.owasp:dependency-check-maven:check \
             -DfailBuildOnCVSS=7 \
-            -DsuppressionFiles=owasp-suppressions.xml
+            -DsuppressionFiles=dependency-check-suppression.xml
       
       - name: Upload OWASP Report
         uses: actions/upload-artifact@v4
