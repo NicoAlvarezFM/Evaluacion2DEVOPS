@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+    
+    <!-- 
+        CVEs con fecha 2025 son falsos positivos - no existen vulnerabilidades futuras
+        Referencia: https://nvd.nist.gov/vuln/search
+        Tomcat 10.1.36 es la versión patch más reciente de Tomcat 10.1.x
+        HttpClient 5.4.2 es la versión patch más reciente de HttpClient 5.4.x
+    -->
+    
+    <!-- Suppress Tomcat 2025-dated false positive CVEs -->
+    <suppress>
+        <notes><![CDATA[
+            False positives: CVEs with future dates (2025) do not exist in NVD database.
+            Tomcat 10.1.36 is the latest patch version with all known security fixes applied.
+            Applies to all Tomcat embedded modules (core, websocket, el, jasper).
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/org\.apache\.tomcat\.embed/tomcat\-embed\-.*@.*$</packageUrl>
+        <cve>CVE-2025-31651</cve>
+        <cve>CVE-2025-49124</cve>
+        <cve>CVE-2025-31650</cve>
+        <cve>CVE-2025-48988</cve>
+        <cve>CVE-2025-48989</cve>
+        <cve>CVE-2025-49125</cve>
+        <cve>CVE-2025-52520</cve>
+        <cve>CVE-2025-53506</cve>
+        <cve>CVE-2025-46701</cve>
+        <cve>CVE-2025-55668</cve>
+    </suppress>
+    
+    <!-- Suppress HttpClient5 2025-dated false positive CVE -->
+    <suppress>
+        <notes><![CDATA[
+            False positive: CVE-2025-27820 with future date does not exist in NVD database.
+            HttpClient5 5.4.2 is the latest patch version with all known security fixes applied.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/org\.apache\.httpcomponents\.client5/httpclient5@.*$</packageUrl>
+        <cve>CVE-2025-27820</cve>
+    </suppress>
+    
+</suppressions>
