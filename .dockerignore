@@ -1,0 +1,40 @@
+# Build
+target/
+*.class
+*.jar
+*.war
+.mvn/wrapper/maven-wrapper.jar
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# System
+.DS_Store
+Thumbs.db
+
+# Docs
+README.md
+*.md
+
+# Logs
+*.log
+
+# Temp
+*.tmp
+*.swp
+*.swo
+
+# CI/CD
+.github/

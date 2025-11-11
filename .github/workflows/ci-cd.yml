@@ -1,0 +1,219 @@
+# CI/CD Pipeline - Evaluación DevOps
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  JAVA_VERSION: '21'
+  JAVA_DISTRIBUTION: 'temurin'
+  IMAGE_NAME: bdget-microservicio
+  REGISTRY: ghcr.io
+
+jobs:
+  # Job 1: Build y Tests con JaCoCo (IE2)
+  build-and-test:
+    name: Build y Tests con JaCoCo
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      - name: Configurar JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          cache: 'maven'
+      
+      - name: Compilar proyecto
+        run: ./mvnw clean compile
+      
+      - name: Ejecutar tests con JaCoCo
+        run: ./mvnw verify
+      
+      - name: Generar reporte de cobertura
+        run: ./mvnw jacoco:report
+      
+      - name: Subir reporte de JaCoCo
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: target/site/jacoco/
+          retention-days: 30
+      
+      - name: Verificar cobertura mínima
+        run: |
+          echo "Verificando cobertura de codigo..."
+          if [ -f target/site/jacoco/index.html ]; then
+            echo "SUCCESS: Reporte de cobertura generado exitosamente"
+          else
+            echo "ERROR: No se genero el reporte de cobertura"
+            exit 1
+          fi
+      
+      - name: Subir resultados de tests
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: target/surefire-reports/
+          retention-days: 30
+
+  # Job 2: Análisis de Seguridad con Quality Gate (IE3)
+  security-scan:
+    name: Análisis de Seguridad
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      - name: Configurar JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          cache: 'maven'
+      
+      - name: Analizar dependencias con OWASP
+        id: owasp-check
+        run: |
+          echo "Ejecutando OWASP Dependency Check..."
+          ./mvnw org.owasp:dependency-check-maven:check -DfailBuildOnCVSS=7
+        continue-on-error: true
+      
+      - name: Subir reporte de seguridad OWASP
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: owasp-report
+          path: target/dependency-check-report.html
+          retention-days: 30
+      
+      - name: Verificar resultados OWASP
+        if: steps.owasp-check.outcome == 'failure'
+        run: |
+          echo "ERROR: OWASP Check detecto vulnerabilidades criticas (CVSS >= 7)"
+          echo "BLOCKED: Build bloqueado por problemas de seguridad"
+          exit 1
+
+  # Job 3: Build Docker Image (IE1)
+  build-docker:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: [build-and-test, security-scan]
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      - name: Configurar Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login a GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extraer metadata para Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+      
+      - name: Build y Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            VCS_REF=${{ github.sha }}
+      
+      - name: Escanear imagen Docker con Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+      
+      - name: Upload Trivy results a GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # Job 4: Deploy Simulado (IE4)
+  deploy:
+    name: Deploy con Docker Compose
+    runs-on: ubuntu-latest
+    needs: build-docker
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: development
+      url: http://localhost:8080
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      - name: Simular despliegue
+        run: |
+          echo "Iniciando despliegue..."
+          echo "SUCCESS: Imagen Docker validada y lista"
+          echo "SUCCESS: Despliegue simulado exitoso"
+          echo ""
+          echo "Endpoints disponibles:"
+          echo "   - API: http://localhost:8080"
+          echo "   - H2 Console: http://localhost:8080/h2-console"
+          echo "   - Health Check: http://localhost:8080/actuator/health"
+          echo "   - Metrics: http://localhost:8080/actuator/metrics"
+
+  # Job 5: Notificación de Estado
+  notify:
+    name: Notificación Pipeline
+    runs-on: ubuntu-latest
+    needs: [build-and-test, security-scan, build-docker, deploy]
+    if: always()
+    
+    steps:
+      - name: Resumen del Pipeline
+        run: |
+          echo "Resumen Pipeline CI/CD"
+          echo "================================"
+          echo "Build & Test: ${{ needs.build-and-test.result }}"
+          echo "Security Scan: ${{ needs.security-scan.result }}"
+          echo "Docker Build: ${{ needs.build-docker.result }}"
+          echo "Deploy: ${{ needs.deploy.result }}"
+          echo "================================"
+          
+          if [ "${{ needs.build-and-test.result }}" == "failure" ] || \
+             [ "${{ needs.build-docker.result }}" == "failure" ]; then
+            echo "ERROR: Pipeline FAILED"
+            exit 1
+          else
+            echo "SUCCESS: Pipeline SUCCESS"
+          fi

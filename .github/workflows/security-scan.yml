@@ -1,0 +1,215 @@
+# Workflow de Seguridad con Snyk - IE3
+
+name: Security Scan
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Ejecutar análisis semanal los lunes a las 9:00 AM
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  # Snyk Security Scan
+  snyk-scan:
+    name: Snyk Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      - name: Configurar JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+      
+      - name: Compilar proyecto
+        run: ./mvnw clean package -DskipTests
+      
+      - name: Run Snyk to check for vulnerabilities
+        uses: snyk/actions/maven@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high --sarif-file-output=snyk.sarif
+      
+      - name: Upload result to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: snyk.sarif
+      
+      - name: Snyk Monitor
+        uses: snyk/actions/maven@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: monitor
+
+  # OWASP Dependency Check
+  owasp-scan:
+    name: OWASP Dependency Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      - name: Configurar JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+      
+      - name: Run OWASP Dependency Check
+        run: |
+          ./mvnw org.owasp:dependency-check-maven:check \
+            -DfailBuildOnCVSS=7 \
+            -DsuppressionFiles=owasp-suppressions.xml
+      
+      - name: Upload OWASP Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: owasp-dependency-check-report
+          path: target/dependency-check-report.html
+          retention-days: 30
+
+  # CodeQL Analysis
+  codeql-analysis:
+    name: CodeQL Security Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: java
+      
+      - name: Configurar JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+      
+      - name: Build project
+        run: ./mvnw clean package -DskipTests
+      
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+  # Resumen de Seguridad con Bloqueo
+  security-summary:
+    name: Security Summary & Gate
+    runs-on: ubuntu-latest
+    needs: [snyk-scan, owasp-scan, codeql-analysis]
+    if: always()
+    
+    steps:
+      - name: Resumen de Análisis de Seguridad
+        run: |
+          echo "Resumen de Seguridad"
+          echo "================================"
+          echo "Snyk Scan: ${{ needs.snyk-scan.result }}"
+          echo "OWASP Check: ${{ needs.owasp-scan.result }}"
+          echo "CodeQL Analysis: ${{ needs.codeql-analysis.result }}"
+          echo "================================"
+      
+      - name: Evaluar Quality Gate
+        id: quality-gate
+        run: |
+          FAILED=false
+          
+          if [ "${{ needs.owasp-scan.result }}" == "failure" ]; then
+            echo "ERROR: OWASP Dependency Check FAILED - Vulnerabilidades criticas detectadas"
+            FAILED=true
+          fi
+          
+          if [ "${{ needs.codeql-analysis.result }}" == "failure" ]; then
+            echo "ERROR: CodeQL Analysis FAILED - Problemas de seguridad en el codigo"
+            FAILED=true
+          fi
+          
+          if [ "$FAILED" == "true" ]; then
+            echo "BLOCKED: QUALITY GATE FAILED - Build bloqueado por problemas de seguridad"
+            echo "quality_gate=failed" >> $GITHUB_OUTPUT
+            exit 1
+          else
+            echo "SUCCESS: QUALITY GATE PASSED - No se encontraron problemas criticos"
+            echo "quality_gate=passed" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Crear Issue de Alerta de Seguridad
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '[SECURITY ALERT] Build #${{ github.run_number }} Bloqueado',
+              body: `## Analisis de Seguridad Fallido
+              
+              **Build:** #${{ github.run_number }}
+              **Branch:** ${{ github.ref_name }}
+              **Commit:** ${{ github.sha }}
+              **Triggered by:** @${{ github.actor }}
+              
+              ### Resultados:
+              - **Snyk Scan:** ${{ needs.snyk-scan.result }}
+              - **OWASP Check:** ${{ needs.owasp-scan.result }}
+              - **CodeQL Analysis:** ${{ needs.codeql-analysis.result }}
+              
+              ### Acción Requerida:
+              El build ha sido bloqueado debido a problemas de seguridad críticos.
+              Por favor revisa los reportes en la pestaña [Security](/${{ github.repository }}/security) y en los [Artifacts](/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+              
+              ### Enlaces:
+              - [Workflow Run](/${{ github.repository }}/actions/runs/${{ github.run_id }})
+              - [Security Alerts](/${{ github.repository }}/security/dependabot)
+              - [Code Scanning](/${{ github.repository }}/security/code-scanning)
+              `,
+              labels: ['security', 'critical', 'bug']
+            });
+            console.log('Issue creado:', issue.data.html_url);
+      
+      - name: Comentar en PR si existe
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `## Quality Gate Failed - Security Issues Detected
+              
+              El analisis de seguridad ha detectado problemas criticos que bloquean este PR.
+              
+              ### Resultados:
+              - **OWASP Check:** ${{ needs.owasp-scan.result }}
+              - **CodeQL Analysis:** ${{ needs.codeql-analysis.result }}
+              
+              **ADVERTENCIA: Este PR no puede ser mergeado hasta que se resuelvan los problemas de seguridad.**
+              
+              Revisa los reportes en los artifacts del workflow.`
+            });

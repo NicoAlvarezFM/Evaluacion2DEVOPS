@@ -1,0 +1,57 @@
+# Configuración Dependabot para IE3
+
+version: 2
+updates:
+  # Dependencias Maven
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "java"
+      - "security"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    assignees:
+      - "NicoAlvarezFM"
+    # Alertas de seguridad
+    allow:
+      - dependency-type: "direct"
+      - dependency-type: "indirect"
+    # Ignorar actualizaciones mayores que puedan romper
+    ignore:
+      - dependency-name: "org.springframework.boot:*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.springframework.cloud:*"
+        update-types: ["version-update:semver-major"]
+
+  # Dependencias GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(ci)"
+
+  # Dependencias Docker
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "chore(docker)"
