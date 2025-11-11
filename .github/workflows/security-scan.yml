@@ -70,13 +70,15 @@ jobs:
           cache: 'maven'
       
       - name: Run OWASP Dependency Check
-        timeout-minutes: 10
+        timeout-minutes: 15
         run: |
           ./mvnw org.owasp:dependency-check-maven:check \
             -DfailBuildOnCVSS=7 \
             -DsuppressionFiles=dependency-check-suppression.xml \
             -DskipSystemScope=true \
-            -DskipTestScope=true
+            -DskipTestScope=true \
+            -DdataDirectory=~/.owasp-data \
+            -DautoUpdate=false
       
       - name: Upload OWASP Report
         uses: actions/upload-artifact@v4
