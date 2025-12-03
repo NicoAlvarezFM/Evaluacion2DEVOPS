@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bdget-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bdget
+  template:
+    metadata:
+      labels:
+        app: bdget
+    spec:
+      containers:
+      - name: bdget
+        image: nicoalvarezfm/examendevops:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "default"
