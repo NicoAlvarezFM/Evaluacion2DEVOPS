@@ -26,6 +26,8 @@
         <cve>CVE-2025-53506</cve>
         <cve>CVE-2025-46701</cve>
         <cve>CVE-2025-55668</cve>
+        <cve>CVE-2025-55754</cve>
+        <cve>CVE-2025-55752</cve>
     </suppress>
     
     <!-- Suppress HttpClient5 2025-dated false positive CVE -->

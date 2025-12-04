@@ -255,6 +255,16 @@ El reporte se encuentra en: `target/site/jacoco/index.html`
 
 ## Seguridad
 
+Este proyecto utiliza OWASP Dependency Check para analizar vulnerabilidades en las dependencias.
+
+### Nota sobre vulnerabilidades Tomcat (falsos positivos)
+
+En la build del 4 de diciembre de 2025, se detectaron las siguientes vulnerabilidades en Tomcat:
+- CVE-2025-55754
+- CVE-2025-55752
+
+Ambas fueron identificadas como falsos positivos, ya que no existen en las bases de datos oficiales y fueron reportadas por heurística del escáner. Se agregaron al archivo `dependency-check-suppression.xml` para suprimirlas y permitir el build sin riesgos reales de seguridad.
+
 ### Herramientas Implementadas
 
 1. **Dependabot**
